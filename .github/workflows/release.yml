@@ -1,0 +1,28 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '[0-9][0-9].[0-9]*.[0-9]*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release ZIP
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          ZIP="bseoa-claude-skill-${TAG}.zip"
+          zip -r "$ZIP" bseoa/ install.sh install.bat README.md
+          echo "ZIP=${ZIP}" >> "$GITHUB_ENV"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ZIP }}
+          generate_release_notes: true
