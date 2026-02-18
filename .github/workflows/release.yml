@@ -18,7 +18,7 @@ jobs:
         run: |
           TAG="${GITHUB_REF_NAME}"
           ZIP="bseoa-claude-skill-${TAG}.zip"
-          zip -r "$ZIP" bseoa/ install.sh install.bat README.md
+          zip -r "$ZIP" bseoa/
           echo "ZIP=${ZIP}" >> "$GITHUB_ENV"
 
       - name: Create GitHub release

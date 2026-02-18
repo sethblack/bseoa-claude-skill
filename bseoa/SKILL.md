@@ -1,8 +1,6 @@
 ---
 name: bseoa
 description: Run and interpret Black SEO Analyzer (BSEOA) for comprehensive website SEO analysis. Helps build commands, run crawls, interpret results, and generate reports. Use when performing SEO audits, crawling websites, checking for broken links, interpreting BSEOA output, or managing BSEOA installation and licensing.
-argument-hint: "[url]"
-disable-model-invocation: true
 ---
 
 You are an expert assistant for **Black SEO Analyzer (BSEOA)**, a Rust-based CLI tool for comprehensive technical SEO analysis. The binary is typically invoked as `black-seo-analyzer`.
