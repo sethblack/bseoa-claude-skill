@@ -1,12 +1,29 @@
-# BSEOA JSON Output Schema
+# BSEOA JSON / JSONL Output Schema
 
 ## Contents
-- [Top-level page fields](#top-level-page-fields)
+- [Output modes and shape](#output-modes-and-shape)
+- [Top-level page fields (full json/jsonl)](#top-level-page-fields-full-jsonjsonl)
 - [The warnings array](#the-warnings-array)
+- [jsonl-summary page record schema](#jsonl-summary-page-record-schema)
+- [jsonl-summary aggregate record schema](#jsonl-summary-aggregate-record-schema)
 - [Nested analyzer result fields](#nested-analyzer-result-fields)
 - [Sub-schemas: link_analysis, web_vitals_metrics, AI analyzers](#sub-schemas)
 
-## Top-level page fields
+## Output modes and shape
+
+`--output-type` determines schema shape:
+
+- `json`: full page objects in a JSON array (`Page[]`)
+- `jsonl`: full page objects, one `Page` per line (JSON Lines)
+- `jsonl-summary`: compact page objects, one per line, optionally prefixed with a site aggregate summary line when `--aggregate-warnings` is used
+
+Output cleanup/filter flags:
+
+- `--include-ngrams` (jsonl): include `ngrams_1/2/3`; otherwise stripped by default
+- `--min-severity <low|medium|high|critical>`: filters warnings below threshold in JSONL/summary generation
+- `--aggregate-warnings` (jsonl-summary): emits leading `site_summary` aggregate record
+
+## Top-level page fields (full json/jsonl)
 
 ```
 url                        string   — Crawled page URL
@@ -59,11 +76,61 @@ This is where all detected SEO problems live. Each warning:
 {
   "message": "string",   // Human-readable description of the issue
   "key":     "string?",  // Dot-notation category key, e.g. "content.too_short"
-  "link":    "string?"   // Documentation URL for the issue
+  "link":    "string?",  // Documentation URL for the issue
+  "severity": "low|medium|high|critical" // Default: "medium" when missing in older records
 }
 ```
 
 **When summarizing results, always start with the `warnings` array for each page.**
+
+## jsonl-summary page record schema
+
+Each non-aggregate line in `--output-type jsonl-summary` uses this compact shape:
+
+```json
+{
+  "url": "string",
+  "status_code": 200,
+  "warning_count": 12,
+  "warnings": [
+    {
+      "message": "string",
+      "key": "string?",
+      "link": "string?",
+      "severity": "low|medium|high|critical"
+    }
+  ],
+  "ttfb_millis": 123,
+  "web_vitals_score": 78,
+  "redirected_to": "string|null"
+}
+```
+
+Notes:
+- `warnings` are filtered by `--min-severity` when provided.
+- Severity is preserved for new records and derived from warning key for older records that lack `severity`.
+
+## jsonl-summary aggregate record schema
+
+When `--aggregate-warnings` is enabled with `jsonl-summary`, the first line is:
+
+```json
+{
+  "_record_type": "site_summary",
+  "total_pages": 250,
+  "total_warnings": 1430,
+  "aggregated_warnings": [
+    {
+      "key": "meta.missing_canonical",
+      "count": 133,
+      "severity": "high",
+      "affected_urls": ["https://example.com/page-a", "https://example.com/page-b"]
+    }
+  ]
+}
+```
+
+`aggregated_warnings` is sorted by `count` descending and respects `--min-severity` filtering.
 
 ## Nested analyzer result fields
 

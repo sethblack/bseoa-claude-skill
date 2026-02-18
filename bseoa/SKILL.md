@@ -31,6 +31,7 @@ Always ask clarifying questions if the user's goal is unclear before running a c
 | `html-folder` | Human-readable interactive report (default) |
 | `json` | Programmatic access, piping to other tools |
 | `jsonl` | Streaming/large crawls, one page per line |
+| `jsonl-summary` | Compact per-page SEO triage fields only (best for AI analysis) |
 | `csv` | Spreadsheet analysis, nested data expanded |
 | `csv-flat` | Spreadsheet analysis, one row per page |
 | `xml` | Legacy integrations |
@@ -38,6 +39,18 @@ Always ask clarifying questions if the user's goal is unclear before running a c
 | `sitemap` | Visual sitemap hierarchy |
 | `topic-cluster` | Content grouped by semantic similarity |
 | `broken-links` | CSV of all broken/redirected links |
+
+### Output Cleanup & Signal Controls
+```
+--include-ngrams             Include ngrams_1/2/3 in JSONL output (off by default)
+--min-severity <LEVEL>       Filter warnings below threshold: low|medium|high|critical
+--aggregate-warnings         Add a leading site_summary record in JSONL output
+```
+
+Notes:
+- `jsonl` now strips `ngrams_1/2/3` by default to reduce output size and noise.
+- `--min-severity` works with both new and old crawl records.
+- `--aggregate-warnings` emits a site-level rollup sorted by warning count.
 
 ### Crawl Control
 ```
@@ -136,6 +149,16 @@ black-seo-analyzer \
   --output-file report.json
 ```
 
+### Compact JSONL summary for AI-first triage
+```bash
+black-seo-analyzer \
+  --url-to-begin-crawl https://example.com \
+  --output-type jsonl-summary \
+  --min-severity medium \
+  --aggregate-warnings \
+  --output-file summary.jsonl
+```
+
 ### Sitemap-driven crawl
 ```bash
 black-seo-analyzer \
@@ -208,70 +231,33 @@ black-seo-analyzer \
 
 ### Rules for interpreting output — follow these exactly
 
-1. **Never `Read` a JSON output file directly without extracting a compact summary first.** Each page object contains massive fields (`ngrams_1/2/3`, full link arrays, raw AI responses) that consume enormous context and leave no room for reasoning.
-2. **Always run the compact extraction command** before reading any JSON output. This strips the bloat and keeps only the fields needed for analysis.
-3. **Drill into specific pages on demand** — after identifying problem pages from the compact summary, extract the full object for just those pages.
-4. **Do not guess at field names.** The JSON schema is documented in [reference/json-schema.md](reference/json-schema.md).
-5. **Summarize findings in plain language.** Report issues grouped by severity, not as raw JSON.
+1. **Prefer `--output-type jsonl-summary` for large audits.** It emits only triage-ready fields and is the best default for AI analysis.
+2. **Use `--min-severity` to suppress low-signal warnings** during output generation (for example, `medium` or `high`).
+3. **Use `--aggregate-warnings` when you need site-wide pattern detection fast** (count + affected URLs per warning key).
+4. **Use full `json`/`jsonl` only when deep diagnostics are needed**, then drill into specific pages.
+5. **Do not guess at field names.** The JSON schema is documented in [reference/json-schema.md](reference/json-schema.md).
+6. **Summarize findings in plain language.** Group by severity and business impact, not raw JSON dumps.
 
 ---
 
-### Why JSON files are large
+### Recommended reading workflow (no custom extraction script needed)
 
-Each page object contains fields that are useful for BSEOA internally but irrelevant to SEO triage:
-- `ngrams_1/2/3` — keyword frequency tables (can be thousands of entries per page)
-- `internal_links`, `external_links`, `stylesheets`, `scripts`, `images` — full URL arrays
-- `link_analysis` — detailed per-link objects duplicating the link arrays
-- `anthropic_analysis.raw_response` (and other AI analyzers) — full LLM response text
-
-The fields that actually matter for analysis are: `url`, `title`, `description`, `warnings`, `web_vitals_score`, `ttfb_millis`, `redirected_to`.
-
----
-
-### Two-pass reading workflow
-
-**Pass 1 — Extract compact summary** (run this, then `Read` compact-summary.json)
-
-For `--output-type json`:
-```bash
-python3 -c "
-import json
-pages = json.load(open('report.json'))
-summary = [{'url': p.get('url'), 'title': p.get('title'), 'description': p.get('description'), 'warnings': p.get('warnings', []), 'web_vitals_score': p.get('web_vitals_score'), 'ttfb_millis': p.get('ttfb_millis'), 'redirected_to': p.get('redirected_to')} for p in pages]
-summary.sort(key=lambda x: -len(x['warnings']))
-open('compact-summary.json', 'w').write(json.dumps(summary, indent=2))
-print(f'Extracted {len(summary)} pages → compact-summary.json')
-"
-```
-
-For `--output-type jsonl`:
-```bash
-python3 -c "
-import json
-pages = [json.loads(l) for l in open('report.jsonl') if l.strip()]
-summary = [{'url': p.get('url'), 'title': p.get('title'), 'description': p.get('description'), 'warnings': p.get('warnings', []), 'web_vitals_score': p.get('web_vitals_score'), 'ttfb_millis': p.get('ttfb_millis'), 'redirected_to': p.get('redirected_to')} for p in pages]
-summary.sort(key=lambda x: -len(x['warnings']))
-open('compact-summary.json', 'w').write(json.dumps(summary, indent=2))
-print(f'Extracted {len(summary)} pages → compact-summary.json')
-"
-```
-
-Then use the `Read` tool on `compact-summary.json`.
-
-**Pass 2 — Drill into a specific page** (when the user wants full detail on one URL)
+**Pass 1 — Generate compact, analysis-ready output directly**
 
 ```bash
-python3 -c "
-import json
-url = 'REPLACE_WITH_URL'
-pages = json.load(open('report.json'))
-page = next((p for p in pages if p.get('url') == url), None)
-open('page-detail.json', 'w').write(json.dumps(page, indent=2) if page else '{}')
-print('Written to page-detail.json')
-"
+black-seo-analyzer \
+  --url-to-begin-crawl https://example.com \
+  --output-type jsonl-summary \
+  --min-severity medium \
+  --aggregate-warnings \
+  --output-file summary.jsonl
 ```
 
-Then `Read` page-detail.json.
+Then use the `Read` tool on `summary.jsonl`.
+
+**Pass 2 — Drill into specific pages only when needed**
+
+If deeper diagnostics are needed for one URL, regenerate or export full data (`json` or `jsonl`) and inspect only the target page object.
 
 ---
 
@@ -279,7 +265,7 @@ Then `Read` page-detail.json.
 
 **For each page, check in this order:**
 1. `warnings` — all detected issues (start here; this is the primary output)
-2. `title` and `description` — present and not empty?
+2. `warnings[*].severity` — prioritize `critical` then `high`
 3. `web_vitals_score` — below 50 needs attention
 4. `ttfb_millis` — above 800ms is a concern
 5. `redirected_to` — unexpected redirect?
