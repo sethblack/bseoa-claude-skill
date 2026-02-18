@@ -12,6 +12,21 @@ When you type `/bseoa` in Claude Code, Claude becomes an expert assistant for BS
 - Prioritize findings by SEO impact
 - Suggest command flags for follow-up analysis
 
+## Enabling the Skill in Claude
+
+If you're using Claude (the web app) rather than Claude Code CLI, you can install this as a custom skill:
+
+1. Navigate to **Settings > Capabilities**.
+2. Ensure that **Code execution and file creation** is enabled.
+3. Scroll to the **Skills** section.
+4. Toggle individual skills on or off as needed.
+5. To add this custom skill, click **"Upload skill"** and upload the ZIP file. The ZIP file for this skill is attached to the latest Release on GitHub.
+
+After uploading, go to **Settings > Capabilities** and under **Additional allowed domains** add:
+
+- `download.blackseoanalyzer.com`
+- The domain(s) of the website(s) you plan to crawl, so Claude can access them.
+
 ## Installation
 
 ### Windows
