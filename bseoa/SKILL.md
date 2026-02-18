@@ -208,41 +208,83 @@ black-seo-analyzer \
 
 ### Rules for interpreting output — follow these exactly
 
-1. **Use the `Read` tool directly on output files.** Claude can parse JSON natively. Do not write or execute Python, Node.js, or any other script to read results. Do not use `jq` unless the file is confirmed to be too large for `Read`.
-2. **For large JSON files** (over ~2000 lines), use `Grep` to extract specific fields by pattern rather than reading the whole file. For example, grep for `"warnings"` or `"url"` to pull targeted data.
-3. **Do not guess at field names.** The JSON schema is documented below — use it.
-4. **Summarize findings in plain language.** After reading the file, report issues grouped by severity, not as raw JSON.
+1. **Never `Read` a JSON output file directly without extracting a compact summary first.** Each page object contains massive fields (`ngrams_1/2/3`, full link arrays, raw AI responses) that consume enormous context and leave no room for reasoning.
+2. **Always run the compact extraction command** before reading any JSON output. This strips the bloat and keeps only the fields needed for analysis.
+3. **Drill into specific pages on demand** — after identifying problem pages from the compact summary, extract the full object for just those pages.
+4. **Do not guess at field names.** The JSON schema is documented in [reference/json-schema.md](reference/json-schema.md).
+5. **Summarize findings in plain language.** Report issues grouped by severity, not as raw JSON.
 
 ---
 
-### JSON output structure
+### Why JSON files are large
 
-The JSON output is an **array of page objects** — one object per crawled page.
+Each page object contains fields that are useful for BSEOA internally but irrelevant to SEO triage:
+- `ngrams_1/2/3` — keyword frequency tables (can be thousands of entries per page)
+- `internal_links`, `external_links`, `stylesheets`, `scripts`, `images` — full URL arrays
+- `link_analysis` — detailed per-link objects duplicating the link arrays
+- `anthropic_analysis.raw_response` (and other AI analyzers) — full LLM response text
 
-**Key field**: `warnings` — array of detected SEO issues, each with `message`, `key` (e.g. `content.too_short`), and `link`. **Always start here when summarizing results.**
-
-For the complete field reference (all page fields, nested analyzers, sub-schemas), see [reference/json-schema.md](reference/json-schema.md).
+The fields that actually matter for analysis are: `url`, `title`, `description`, `warnings`, `web_vitals_score`, `ttfb_millis`, `redirected_to`.
 
 ---
 
-### How to read results efficiently
+### Two-pass reading workflow
 
-**Step 1 — Read the file**
-```
-Read the output JSON file directly with the Read tool.
+**Pass 1 — Extract compact summary** (run this, then `Read` compact-summary.json)
+
+For `--output-type json`:
+```bash
+python3 -c "
+import json
+pages = json.load(open('report.json'))
+summary = [{'url': p.get('url'), 'title': p.get('title'), 'description': p.get('description'), 'warnings': p.get('warnings', []), 'web_vitals_score': p.get('web_vitals_score'), 'ttfb_millis': p.get('ttfb_millis'), 'redirected_to': p.get('redirected_to')} for p in pages]
+summary.sort(key=lambda x: -len(x['warnings']))
+open('compact-summary.json', 'w').write(json.dumps(summary, indent=2))
+print(f'Extracted {len(summary)} pages → compact-summary.json')
+"
 ```
 
-**Step 2 — For each page, check in this order:**
-1. `warnings` — all detected issues
+For `--output-type jsonl`:
+```bash
+python3 -c "
+import json
+pages = [json.loads(l) for l in open('report.jsonl') if l.strip()]
+summary = [{'url': p.get('url'), 'title': p.get('title'), 'description': p.get('description'), 'warnings': p.get('warnings', []), 'web_vitals_score': p.get('web_vitals_score'), 'ttfb_millis': p.get('ttfb_millis'), 'redirected_to': p.get('redirected_to')} for p in pages]
+summary.sort(key=lambda x: -len(x['warnings']))
+open('compact-summary.json', 'w').write(json.dumps(summary, indent=2))
+print(f'Extracted {len(summary)} pages → compact-summary.json')
+"
+```
+
+Then use the `Read` tool on `compact-summary.json`.
+
+**Pass 2 — Drill into a specific page** (when the user wants full detail on one URL)
+
+```bash
+python3 -c "
+import json
+url = 'REPLACE_WITH_URL'
+pages = json.load(open('report.json'))
+page = next((p for p in pages if p.get('url') == url), None)
+open('page-detail.json', 'w').write(json.dumps(page, indent=2) if page else '{}')
+print('Written to page-detail.json')
+"
+```
+
+Then `Read` page-detail.json.
+
+---
+
+### Interpreting the compact summary
+
+**For each page, check in this order:**
+1. `warnings` — all detected issues (start here; this is the primary output)
 2. `title` and `description` — present and not empty?
-3. `headings.H1` — exactly one H1?
-4. `ttfb_millis` / `total_load_time_millis` — any performance concerns?
-5. `web_vitals_score` — below 50 needs attention
-6. `ssl_expiration_date` — expiring soon?
-7. `redirected_to` — unexpected redirect?
-8. `structured_data_analysis` — any issues?
+3. `web_vitals_score` — below 50 needs attention
+4. `ttfb_millis` — above 800ms is a concern
+5. `redirected_to` — unexpected redirect?
 
-**Step 3 — Triage warnings by key prefix:**
+**Triage warnings by key prefix:**
 | Key prefix | Category |
 |------------|----------|
 | `content.*` | Content quality issues |
@@ -255,7 +297,7 @@ Read the output JSON file directly with the Read tool.
 | `structured_data.*` | Schema markup issues |
 | `accessibility.*` | Accessibility issues |
 
-**Step 4 — For large crawls**, prioritize pages with the most warnings first, then pages with missing titles or descriptions, then pages with poor web vitals scores.
+**For large crawls**, prioritize pages with the most warnings first, then pages with missing titles or descriptions, then pages with poor web vitals scores.
 
 ---
 
