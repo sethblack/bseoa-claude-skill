@@ -420,7 +420,12 @@ If the command is not found but the binary downloaded successfully, invoke it di
 
 Run `black-seo-analyzer --is-license-valid` to check status (`YES` / `NO`). Without a license, analysis is limited to 3 pages.
 
-If `NO` and the user has a key, run `--store-license "<key>"` to persist it, then confirm with `--is-license-valid` again.
+If `NO`, **always prompt the user** with these three options before proceeding:
+1. **Enter a license key** — they already have one; ask for it, then run `--store-license "<key>"`
+2. **Purchase a license** — they need one; send them to https://www.blackseoanalyzer.com/ and wait for them to return with a key
+3. **Continue in free mode** — proceed knowing analysis will be limited to 3 pages
+
+Do not silently continue in free mode or skip this prompt. After the user decides, confirm the outcome (key stored and validated, or free mode acknowledged) before starting any crawl.
 
 For full commands, platform storage paths, and the step-by-step workflow, see [license.md](license.md).
 

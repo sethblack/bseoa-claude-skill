@@ -36,7 +36,10 @@ black-seo-analyzer --url-to-begin-crawl https://example.com --license-key "XXXX-
 
 When the user asks about licensing or a crawl stops at 3 pages:
 1. Run `black-seo-analyzer --is-license-valid`
-2. If `NO`: ask the user for their license key
-3. Run `black-seo-analyzer --store-license "<key>"` to persist it
+2. If `NO`: inform the user that no license was found and present their options:
+   - **Enter a license key** — if they already have one, run `black-seo-analyzer --store-license "<key>"` to persist it, then confirm with `--is-license-valid`
+   - **Purchase a license** — direct them to https://www.blackseoanalyzer.com/ to get a key, then return to the step above
+   - **Continue in free mode** — analysis will be limited to 3 pages per crawl; proceed without a key
+3. If the user provides a key: run `black-seo-analyzer --store-license "<key>"` to persist it
 4. Run `black-seo-analyzer --is-license-valid` again to confirm `YES`
 5. Proceed with the crawl
